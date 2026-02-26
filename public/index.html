@@ -133,8 +133,12 @@
 
 <script>
 const MAINNET  = 'https://rpc.goat.network'
+const TESTNET  = 'https://rpc.testnet3.goat.network'
 const TNET_EXP = 'https://explorer.testnet3.goat.network'
-const IDENTITY = '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432'
+// Mainnet ERC-8004 (chain 2345)
+const IDENTITY_MAINNET = '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432'
+// Testnet3 ERC-8004 (chain 48816) — deployed by GOATBot 🐐
+const IDENTITY_TESTNET = '0x556089008Fc0a60cD09390Eca93477ca254A5522'
 const USDC     = '0x29d1ee93e9ecf6e50f309f498e40a6b42d352fa1'
 const USDT     = '0xdce0af57e8f2ce957b3838cd2a2f3f3677965dd3'
 const REG_TOPIC = '0xca52e62c367d81bb2e328eb795f7c7ba24afb478408a26c0e201d155c449bc4a'
@@ -163,9 +167,24 @@ async function rpc(method, params=[]) {
 }
 
 // ── Agents ─────────────────────────────────────────────────────
+async function rpcTestnet(method, params=[]) {
+  const r = await fetch(TESTNET, {method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({jsonrpc:'2.0',method,params,id:1})})
+  return (await r.json()).result
+}
+
 async function loadAgents() {
   try {
-    const logs = await rpc('eth_getLogs', [{address:IDENTITY,fromBlock:'0x0',toBlock:'latest',topics:[REG_TOPIC]}])
+    // Load from both mainnet + testnet3
+    const [mainnetLogs, testnetLogs] = await Promise.all([
+      rpc('eth_getLogs', [{address:IDENTITY_MAINNET,fromBlock:'0x0',toBlock:'latest',topics:[REG_TOPIC]}]),
+      rpcTestnet('eth_getLogs', [{address:IDENTITY_TESTNET,fromBlock:'0x0',toBlock:'latest',topics:[REG_TOPIC]}]),
+    ])
+    const allLogs = [
+      ...(mainnetLogs||[]).map(l=>({...l,_chain:'mainnet',_identity:IDENTITY_MAINNET})),
+      ...(testnetLogs||[]).map(l=>({...l,_chain:'testnet3',_identity:IDENTITY_TESTNET})),
+    ]
+    const logs = allLogs
     if (!logs?.length) { renderAgents(); return }
 
     const next = []
@@ -185,8 +204,10 @@ async function loadAgents() {
           name=j.name||name; desc=j.description||''; x402=j.x402Support||false; svcs=j.services||[]
         }
       } catch {}
+      const chain = log._chain || 'mainnet'
+      const explorerBase = chain==='testnet3' ? 'https://explorer.testnet3.goat.network' : 'https://explorer.goat.network'
       agentWallets.add(owner.toLowerCase())
-      next.push({agentId,owner,name,desc,x402,svcs,block,txHash})
+      next.push({agentId,owner,name,desc,x402,svcs,block,txHash,chain,explorerBase})
     }
 
     const added = next.filter(a=>!agents.find(b=>b.agentId===a.agentId))
@@ -214,7 +235,10 @@ function renderAgents() {
         ${a.svcs.map(s=>`<span class="atag">${esc(s.name)}</span>`).join('')}
         ${a.x402?'<span class="atag" style="color:var(--green);border-color:rgba(16,185,129,.4)">x402</span>':''}
       </div>
-      <div class="ablock">Block #${a.block} · <a href="https://explorer.goat.network/tx/${a.txHash}" target="_blank" style="color:var(--accent2)" onclick="event.stopPropagation()">tx →</a></div>
+      <div class="ablock">
+        <span style="color:${a.chain==='testnet3'?'var(--accent2)':'var(--goat)'}">${a.chain==='testnet3'?'testnet3':'mainnet'}</span>
+        · Block #${a.block} · <a href="${a.explorerBase}/tx/${a.txHash}" target="_blank" style="color:var(--accent2)" onclick="event.stopPropagation()">tx →</a>
+      </div>
     </div>`).join('')
 }
 
