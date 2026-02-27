@@ -218,18 +218,41 @@ async function loadAgents() {
   } catch(e) { console.error('agents',e) }
 }
 
+function copyAddr(addr, el) {
+  navigator.clipboard.writeText(addr).then(()=>{
+    const old = el.textContent; el.textContent = '✓ copied'
+    setTimeout(()=>el.textContent=old, 1500)
+  })
+}
+
+async function loadBalance(addr) {
+  try {
+    const res = await rpcTestnet('eth_getBalance',[addr,'latest'])
+    return (parseInt(res,16)/1e18).toFixed(6) + ' BTC'
+  } catch { return '?' }
+}
+
 function renderAgents() {
   $('c-agents').textContent = agents.length
   const el = $('agent-list')
-  if (!agents.length) { el.innerHTML='<div class="empty"><div class="ei">🔍</div>No agents on mainnet yet</div>'; return }
+  if (!agents.length) { el.innerHTML='<div class="empty"><div class="ei">🔍</div>No agents registered yet</div>'; return }
   el.innerHTML = agents.map(a=>`
-    <div class="ac" onclick="window.open('https://explorer.goat.network/tx/${a.txHash}','_blank')">
+    <div class="ac" onclick="window.open('${a.explorerBase}/tx/${a.txHash}','_blank')">
       <div class="ac-top">
         <div class="aid">#${a.agentId}</div>
         <div class="aname">${esc(a.name)}</div>
         ${a.x402?'<div class="ax">x402 ✓</div>':''}
       </div>
-      <div class="aowner">${short(a.owner)}</div>
+      <div class="aowner" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <a href="${a.explorerBase}/address/${a.owner}" target="_blank"
+           style="color:var(--muted);font-size:10px;text-decoration:none"
+           onclick="event.stopPropagation()"
+           title="${a.owner}">${short(a.owner)}</a>
+        <span onclick="event.stopPropagation();copyAddr('${a.owner}',this)"
+              style="cursor:pointer;font-size:9px;color:var(--accent2);border:1px solid var(--accent2);border-radius:3px;padding:0 4px;opacity:.7"
+              title="Copy full address">copy</span>
+        <span class="abal" id="bal-${a.agentId}" style="font-size:9px;color:var(--muted)">…</span>
+      </div>
       ${a.desc?`<div class="adesc">${esc(a.desc.slice(0,100))}${a.desc.length>100?'…':''}</div>`:''}
       <div class="ameta">
         ${a.svcs.map(s=>`<span class="atag">${esc(s.name)}</span>`).join('')}
@@ -237,9 +260,19 @@ function renderAgents() {
       </div>
       <div class="ablock">
         <span style="color:${a.chain==='testnet3'?'var(--accent2)':'var(--goat)'}">${a.chain==='testnet3'?'testnet3':'mainnet'}</span>
-        · Block #${a.block} · <a href="${a.explorerBase}/tx/${a.txHash}" target="_blank" style="color:var(--accent2)" onclick="event.stopPropagation()">tx →</a>
+        · Block #${a.block}
+        · <a href="${a.explorerBase}/tx/${a.txHash}" target="_blank" style="color:var(--accent2)" onclick="event.stopPropagation()">tx →</a>
+        · <a href="${a.explorerBase}/address/${a.owner}" target="_blank" style="color:var(--muted);font-size:10px" onclick="event.stopPropagation()">addr →</a>
       </div>
     </div>`).join('')
+
+  // Load balances async after render
+  agents.forEach(async a => {
+    const el = $('bal-'+a.agentId)
+    if (!el) return
+    const bal = await loadBalance(a.owner)
+    el.textContent = '⚡ ' + bal
+  })
 }
 
 // ── Transfers ──────────────────────────────────────────────────
