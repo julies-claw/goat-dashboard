@@ -237,7 +237,7 @@ function renderAgents() {
   const el = $('agent-list')
   if (!agents.length) { el.innerHTML='<div class="empty"><div class="ei">🔍</div>No agents registered yet</div>'; return }
   el.innerHTML = agents.map(a=>`
-    <div class="ac" onclick="window.open('${a.explorerBase}/tx/${a.txHash}','_blank')">
+    <div class="ac" onclick="window.open('${a.explorerBase}/address/${a.owner}','_blank')">
       <div class="ac-top">
         <div class="aid">#${a.agentId}</div>
         <div class="aname">${esc(a.name)}</div>
