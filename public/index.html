@@ -150,6 +150,7 @@ const TSS_WALLETS = new Set([
 
 let agents = [], agentWallets = new Set()
 let transfers = [], agentTxs = [], seenHashes = new Set()
+let initialLoadDone = false
 
 const $ = id => document.getElementById(id)
 const esc = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
@@ -215,8 +216,8 @@ async function loadAgents() {
       next.push({agentId,owner,name,desc,x402,svcs,block,txHash,chain,explorerBase})
     }
 
-    const added = next.filter(a=>!agents.find(b=>b.agentId===a.agentId))
-    added.forEach(a=>toast(`🪪 Agent #${a.agentId}: ${a.name}`, 'y'))
+    const added = next.filter(a=>!agents.find(b=>b.agentId===a.agentId&&b.chain===a.chain))
+    if (initialLoadDone) added.forEach(a=>toast(`🪪 Agent #${a.agentId}: ${a.name}`, 'y'))
     agents = next
     renderAgents()
     updateStats()
@@ -313,10 +314,10 @@ async function loadTransfers() {
       transfers.unshift(tx)
       if (isA2A) {
         agentTxs.unshift(tx)
-        toast(`🤖 Agent↔Agent: ${tx.amount} ${tx.symbol}${isX402?' (x402)':''}`, 'g')
+        if (initialLoadDone) toast(`🤖 Agent↔Agent: ${tx.amount} ${tx.symbol}${isX402?' (x402)':''}`, 'g')
       } else if (isX402 && isAgent) {
         agentTxs.unshift(tx)
-        toast(`💸 Agent x402 payment: ${tx.amount} ${tx.symbol}`, 'g')
+        if (initialLoadDone) toast(`💸 Agent x402 payment: ${tx.amount} ${tx.symbol}`, 'g')
       }
     }
     transfers = transfers.slice(0,100)
@@ -473,6 +474,7 @@ function drawGraph() {
 async function tick() {
   await loadAgents()
   await loadTransfers()
+  if (!initialLoadDone) initialLoadDone = true
 }
 
 tick()
