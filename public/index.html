@@ -143,6 +143,11 @@ const USDC     = '0x29d1ee93e9ecf6e50f309f498e40a6b42d352fa1'
 const USDT     = '0xdce0af57e8f2ce957b3838cd2a2f3f3677965dd3'
 const REG_TOPIC = '0xca52e62c367d81bb2e328eb795f7c7ba24afb478408a26c0e201d155c449bc4a'
 
+// Known x402 TSS wallets (payments via x402 DELEGATE flow go to these)
+const TSS_WALLETS = new Set([
+  '0x8d5403cd1ded2982c758594becb4571a5b864057',
+])
+
 let agents = [], agentWallets = new Set()
 let transfers = [], agentTxs = [], seenHashes = new Set()
 
@@ -293,15 +298,26 @@ async function loadTransfers() {
       seenHashes.add(h); gotNew = true
       const from = t.from?.hash?.toLowerCase()
       const to   = t.to?.hash?.toLowerCase()
-      const isA  = agentWallets.has(from)||agentWallets.has(to)
+      const fromIsAgent = agentWallets.has(from)
+      const toIsAgent   = agentWallets.has(to)
+      const isA2A  = fromIsAgent && toIsAgent    // both sides are agents
+      const isAgent = fromIsAgent || toIsAgent   // at least one agent involved
+      const isX402 = TSS_WALLETS.has(to)         // paid to TSS = x402 payment
       const tx = {
         hash:h, from:t.from?.hash, to:t.to?.hash,
         amount:usdc(t.total.value,t.total.decimals),
         symbol:t.token?.symbol||'USDC',
-        block:t.block_number, timestamp:t.timestamp, isA
+        block:t.block_number, timestamp:t.timestamp,
+        isA: isAgent, isA2A, isX402
       }
       transfers.unshift(tx)
-      if (isA) { agentTxs.unshift(tx); toast(`🤖 Agent payment: ${tx.amount} ${tx.symbol}`, 'g') }
+      if (isA2A) {
+        agentTxs.unshift(tx)
+        toast(`🤖 Agent↔Agent: ${tx.amount} ${tx.symbol}${isX402?' (x402)':''}`, 'g')
+      } else if (isX402 && isAgent) {
+        agentTxs.unshift(tx)
+        toast(`💸 Agent x402 payment: ${tx.amount} ${tx.symbol}`, 'g')
+      }
     }
     transfers = transfers.slice(0,100)
     if (gotNew) { renderTxs(); renderAgentTxs(); updateStats(); drawGraph() }
@@ -312,15 +328,22 @@ function renderTxs() {
   $('c-txs').textContent = transfers.length
   const el = $('tx-list')
   if (!transfers.length) { el.innerHTML='<div class="empty"><div class="ei">⏳</div>Waiting...</div>'; return }
-  el.innerHTML = transfers.slice(0,60).map(t=>`
-    <div class="ti ${t.isA?'atx':''}" onclick="window.open('${TNET_EXP}/tx/${t.hash}','_blank')">
+  el.innerHTML = transfers.slice(0,60).map(t=>{
+    const badge = t.isA2A ? '🤖 Agent↔Agent' + (t.isX402?' x402':'')
+                : t.isX402 ? '💸 x402'
+                : t.isA   ? '🤖 Agent'
+                : 'transfer'
+    const cls = (t.isA2A || (t.isA && t.isX402)) ? 'atx' : ''
+    return `
+    <div class="ti ${cls}" onclick="window.open('${TNET_EXP}/tx/${t.hash}','_blank')">
       <div class="ti-top">
         <span class="ta">${t.amount}</span><span class="tk">${t.symbol}</span>
-        <span class="tbadge">${t.isA?'🤖 Agent TX':'transfer'}</span>
+        <span class="tbadge">${badge}</span>
       </div>
       <div class="taddrs"><span class="tfrom">${short(t.from)}</span><span>→</span><span class="tto">${short(t.to)}</span></div>
       <div class="ttime">Block #${t.block}${t.timestamp?' · '+ago(t.timestamp):''}</div>
-    </div>`).join('')
+    </div>`
+  }).join('')
 }
 
 function renderAgentTxs() {
@@ -333,18 +356,21 @@ function renderAgentTxs() {
   el.innerHTML = agentTxs.map(t=>{
     const fa = agents.find(a=>a.owner.toLowerCase()===t.from?.toLowerCase())
     const ta = agents.find(a=>a.owner.toLowerCase()===t.to?.toLowerCase())
+    const badge = t.isA2A ? '🤖 Agent↔Agent' + (t.isX402?' x402':'')
+                : t.isX402 ? '💸 Agent x402'
+                : '🤖 Agent TX'
     return `
     <div class="ti atx" onclick="window.open('${TNET_EXP}/tx/${t.hash}','_blank')">
       <div class="ti-top">
         <span class="ta">${t.amount}</span><span class="tk">${t.symbol}</span>
-        <span class="tbadge">🤖 Agent TX</span>
+        <span class="tbadge">${badge}</span>
       </div>
       <div class="taddrs">
         <span class="tfrom">${fa?'🤖 '+esc(fa.name):short(t.from)}</span>
         <span>→</span>
         <span class="tto">${ta?'🤖 '+esc(ta.name):short(t.to)}</span>
       </div>
-      <div class="ttime">Block #${t.block}</div>
+      <div class="ttime">Block #${t.block}${t.isX402?' · via x402':''}</div>
     </div>`
   }).join('')
 }
