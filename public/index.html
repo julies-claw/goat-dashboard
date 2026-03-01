@@ -145,6 +145,7 @@ const REG_TOPIC = '0xca52e62c367d81bb2e328eb795f7c7ba24afb478408a26c0e201d155c44
 
 let agents = [], agentWallets = new Set()
 let transfers = [], agentTxs = [], seenHashes = new Set()
+let initialLoadDone = false
 
 const $ = id => document.getElementById(id)
 const esc = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
@@ -210,8 +211,8 @@ async function loadAgents() {
       next.push({agentId,owner,name,desc,x402,svcs,block,txHash,chain,explorerBase})
     }
 
-    const added = next.filter(a=>!agents.find(b=>b.agentId===a.agentId))
-    added.forEach(a=>toast(`🪪 Agent #${a.agentId}: ${a.name}`, 'y'))
+    const added = next.filter(a=>!agents.find(b=>b.agentId===a.agentId&&b.chain===a.chain))
+    if (initialLoadDone) added.forEach(a=>toast(`🪪 Agent #${a.agentId}: ${a.name}`, 'y'))
     agents = next
     renderAgents()
     updateStats()
@@ -301,7 +302,7 @@ async function loadTransfers() {
         block:t.block_number, timestamp:t.timestamp, isA
       }
       transfers.unshift(tx)
-      if (isA) { agentTxs.unshift(tx); toast(`🤖 Agent payment: ${tx.amount} ${tx.symbol}`, 'g') }
+      if (isA) { agentTxs.unshift(tx); if (initialLoadDone) toast(`🤖 Agent payment: ${tx.amount} ${tx.symbol}`, 'g') }
     }
     transfers = transfers.slice(0,100)
     if (gotNew) { renderTxs(); renderAgentTxs(); updateStats(); drawGraph() }
@@ -447,6 +448,7 @@ function drawGraph() {
 async function tick() {
   await loadAgents()
   await loadTransfers()
+  if (!initialLoadDone) initialLoadDone = true
 }
 
 tick()
